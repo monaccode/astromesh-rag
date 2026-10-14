@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..types import Chunk, Document, chunk_id
+from .fixed import check_window
 
 
 class RecursiveSplitter:
@@ -10,6 +11,7 @@ class RecursiveSplitter:
         overlap: int = 50,
         separators: list[str] | None = None,
     ):
+        check_window(chunk_size, overlap)
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.separators = separators or ["\n\n", "\n", ". ", " "]

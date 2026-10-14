@@ -3,8 +3,17 @@ from __future__ import annotations
 from ..types import Chunk, Document, chunk_id
 
 
+def check_window(chunk_size: int, overlap: int) -> None:
+    if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
+        raise ValueError(
+            f"chunk_size must be > 0 and 0 <= overlap < chunk_size, got chunk_size={chunk_size}, "
+            f"overlap={overlap}"
+        )
+
+
 class FixedSplitter:
     def __init__(self, chunk_size: int = 500, overlap: int = 50):
+        check_window(chunk_size, overlap)
         self.chunk_size = chunk_size
         self.overlap = overlap
 

@@ -1,0 +1,99 @@
+"""`kind: RAGPipeline` YAML -> Pipeline, compatible with the Astromesh core's files."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+
+from .errors import SpecError
+from .fusion import RRF, WeightedFusion
+from .patterns import PATTERNS
+from .pipeline import IngestPipeline, Pipeline
+from .registry import BuildContext
+from .registry import registry as default_registry
+from .retrievers import BM25Index
+
+_SECTIONS = ("chunking", "embeddings", "vector_store", "reranking", "retrieval")
+_FALLBACK_DIMENSION = 384  # the core's default when the spec gives none
+
+
+@dataclass
+class RAGSpec:
+    name: str
+    chunking: dict = field(default_factory=dict)
+    embeddings: dict = field(default_factory=dict)
+    vector_store: dict = field(default_factory=dict)
+    reranking: dict = field(default_factory=dict)
+    retrieval: dict = field(default_factory=dict)
+
+
+def load_spec(raw: dict) -> RAGSpec:
+    if not isinstance(raw, dict):
+        raise SpecError("RAGPipeline body must be a mapping")
+    if raw.get("kind") != "RAGPipeline":
+        raise SpecError(f"Expected kind: RAGPipeline, got: {raw.get('kind')}")
+    metadata = raw.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise SpecError("RAGPipeline metadata must be a mapping")
+    if not metadata.get("name"):
+        raise SpecError("RAGPipeline missing metadata.name")
+    spec = raw.get("spec", {})
+    if not isinstance(spec, dict):
+        raise SpecError("RAGPipeline spec must be a mapping")
+    for s in _SECTIONS:
+        if s in spec and not isinstance(spec[s], dict):
+            raise SpecError(f"RAGPipeline spec.{s} must be a mapping")
+    return RAGSpec(metadata["name"], **{s: spec.get(s, {}) for s in _SECTIONS})
+
+
+def load_spec_file(path) -> RAGSpec:
+    return load_spec(yaml.safe_load(Path(path).read_text()))
+
+
+def build(spec: RAGSpec, *, llm=None, registry=default_registry) -> Pipeline:
+    from . import builtins  # noqa: F401  (idempotent; registers the defaults)
+
+    emb, vs, rr, rt = spec.embeddings, spec.vector_store, spec.reranking, spec.retrieval
+    ctx = BuildContext(dimension=emb.get("dimension"), llm=llm)
+    embedder = registry.build("embedder", emb.get("provider", "ollama"), emb, ctx)
+    ctx.embedder = embedder
+    ctx.dimension = emb.get("dimension") or embedder.dimension or _FALLBACK_DIMENSION
+
+    pattern = rt.get("pattern", "naive")
+    if pattern not in PATTERNS:
+        raise SpecError(f"unknown retrieval.pattern '{pattern}'; known: {', '.join(PATTERNS)}")
+    if pattern in ("multi_query", "hyde") and llm is None:
+        raise SpecError(f"pattern '{pattern}' needs an llm: build(spec, llm=...)")
+
+    splitter = registry.build(
+        "splitter", spec.chunking.get("strategy", "recursive"), spec.chunking, ctx
+    )
+    index = registry.build("index", vs.get("backend", "faiss"), vs, ctx)
+    bm25 = BM25Index(path=rt.get("bm25_path")) if pattern == "hybrid" else None
+    reranker = None
+    if rr.get("enabled"):
+        reranker = registry.build("reranker", rr.get("provider", "cross_encoder"), rr, ctx)
+
+    top_k = rt.get("top_k", 5)
+    common = {
+        "reranker": reranker,
+        "rerank_k": rr.get("top_k") or top_k,
+        "min_score": rt.get("similarity_threshold"),
+        "candidates": rt.get("candidates") or top_k * 2,
+    }
+    if pattern == "naive":
+        query = PATTERNS["naive"](embedder, index, **common)
+    elif pattern == "hybrid":
+        h = rt.get("hybrid", {})
+        w = h.get("weights")
+        weighted = rt.get("fusion", h.get("fusion", "rrf")) == "weighted"
+        fusion = WeightedFusion(w) if weighted and w else RRF()
+        query = PATTERNS["hybrid"](embedder, index, bm25, fusion=fusion, **common)
+    else:
+        extra = (
+            {"variants": rt["variants"]} if pattern == "multi_query" and "variants" in rt else {}
+        )
+        query = PATTERNS[pattern](embedder, index, llm, **extra, **common)
+    return Pipeline(IngestPipeline(splitter, embedder, index, bm25), query)

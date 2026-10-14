@@ -1,5 +1,6 @@
 """astromesh-rag: composable RAG pipelines."""
 
+from . import builtins as _builtins  # noqa: F401  (registers the defaults)
 from .errors import MissingExtraError, RAGError, SpecError, StageError
 from .registry import BuildContext, Registry, registry
 from .types import Chunk, Document, Hit, QueryResult, chunk_id
