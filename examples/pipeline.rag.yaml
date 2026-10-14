@@ -1,0 +1,23 @@
+# The YAML equivalent of examples/hybrid.py, in the format the Astromesh core loads.
+#   from astromesh_rag.spec import build, load_spec_file
+#   pipeline = build(load_spec_file("examples/pipeline.rag.yaml"))
+apiVersion: astromesh/v1
+kind: RAGPipeline
+metadata:
+  name: nimbus-docs
+spec:
+  chunking:
+    strategy: recursive
+    chunk_size: 800
+    overlap: 80
+  embeddings:
+    provider: sentence_transformers
+    model: all-MiniLM-L6-v2
+  vector_store:
+    backend: memory
+  reranking:
+    enabled: false        # true + provider: cross_encoder to rerank the fused list
+  retrieval:
+    top_k: 5
+    pattern: hybrid
+    hybrid: { fusion: rrf }
