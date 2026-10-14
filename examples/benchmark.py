@@ -58,6 +58,7 @@ def summarize(rows: list[dict], k: int) -> dict:
     lat = [r["ms"] for r in rows]
     return {
         f"recall@{k}": sum(r[f"recall@{k}"] for r in rows) / n,
+        f"precision@{k}": sum(r[f"precision@{k}"] for r in rows) / n,
         "mrr@10": sum(r["mrr@10"] for r in rows) / n,
         "ndcg@10": sum(r["ndcg@10"] for r in rows) / n,
         f"hit_rate@{k}": sum(r[f"hit_rate@{k}"] for r in rows) / n,
@@ -144,7 +145,15 @@ async def main(args) -> Path:
         for (pat, rr, t), rows in groups(["pattern", "rerank", "type"]).items()
     ]
 
-    cols = ["pattern", "rerank", f"recall@{k}", "mrr@10", "ndcg@10", f"hit_rate@{k}"]
+    cols = [
+        "pattern",
+        "rerank",
+        f"recall@{k}",
+        f"precision@{k}",
+        "mrr@10",
+        "ndcg@10",
+        f"hit_rate@{k}",
+    ]
     print("\n## Overall\n")
     print(table(summary, [*cols, "p50_ms", "p95_ms", "llm_calls_per_query"]))
     print("\n## By query type\n")
