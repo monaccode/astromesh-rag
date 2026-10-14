@@ -118,16 +118,20 @@ registry = Registry()   # module-level default
 # tests/test_types.py
 from astromesh_rag.types import Chunk, Document, Hit, QueryResult, chunk_id
 
+
 def test_document_id_defaults_to_content_hash():
     a, b = Document("hello"), Document("hello")
     assert a.resolved_id() == b.resolved_id()
     assert a.resolved_id().startswith("sha256:") and len(a.resolved_id()) == 7 + 16
 
+
 def test_explicit_document_id_wins():
     assert Document("x", id="faq-1").resolved_id() == "faq-1"
 
+
 def test_chunk_id_format():
     assert chunk_id("faq-1", 3) == "faq-1#3"
+
 
 def test_to_list_matches_core_shape():
     c = Chunk(id="d#0", doc_id="d", text="t", metadata={"a": 1})
@@ -136,16 +140,19 @@ def test_to_list_matches_core_shape():
         {"doc_id": "d#0", "content": "t", "metadata": {"a": 1}, "score": 0.5, "source": "vector"}
     ]
 
+
 # tests/test_registry.py
 import pytest
 from astromesh_rag.errors import MissingExtraError, SpecError
 from astromesh_rag.registry import BuildContext, Registry
 from astromesh_rag._extras import require
 
+
 def test_register_and_build():
     r = Registry()
     r.register("splitter", "x", lambda cfg, ctx: ("built", cfg["n"]))
     assert r.build("splitter", "x", {"n": 2}, BuildContext()) == ("built", 2)
+
 
 def test_later_registration_replaces():
     r = Registry()
@@ -153,15 +160,18 @@ def test_later_registration_replaces():
     r.register("splitter", "x", lambda cfg, ctx: 2)
     assert r.build("splitter", "x", {}, BuildContext()) == 2
 
+
 def test_unknown_name_lists_known():
     r = Registry()
     r.register("index", "memory", lambda cfg, ctx: None)
     with pytest.raises(SpecError, match="unknown index 'nope'.*memory"):
         r.build("index", "nope", {}, BuildContext())
 
+
 def test_unknown_kind_rejected():
     with pytest.raises(SpecError):
         Registry().register("banana", "x", lambda cfg, ctx: None)
+
 
 def test_missing_extra_message():
     with pytest.raises(MissingExtraError, match=r"pip install 'astromesh-rag\[qdrant\]'"):
@@ -201,9 +211,15 @@ SentenceSplitter(chunk_size=500, overlap=0); SemanticSplitter(chunk_size=500, si
 - [ ] **Step 1: Failing tests**
 ```python
 # tests/test_splitters.py
-from astromesh_rag.splitters import FixedSplitter, RecursiveSplitter, SemanticSplitter, SentenceSplitter
+from astromesh_rag.splitters import (
+    FixedSplitter,
+    RecursiveSplitter,
+    SemanticSplitter,
+    SentenceSplitter,
+)
 from astromesh_rag.testing import HashEmbedder
 from astromesh_rag.types import Document
+
 
 async def test_recursive_ids_and_metadata():
     doc = Document("a" * 1200, id="d", metadata={"src": "x"})
@@ -212,27 +228,33 @@ async def test_recursive_ids_and_metadata():
     assert all(c.doc_id == "d" and c.metadata["src"] == "x" for c in chunks)
     assert chunks[0].metadata["strategy"] == "recursive"
 
+
 async def test_empty_document_gives_no_chunks():
     for s in (FixedSplitter(), RecursiveSplitter(), SentenceSplitter(), SemanticSplitter()):
         assert await s.split(Document("", id="d")) == []
+
 
 async def test_semantic_without_embedder_says_so():
     chunks = await SemanticSplitter().split(Document("One. Two. Three.", id="d"))
     assert chunks and all(c.metadata["strategy"] == "sentence" for c in chunks)
 
+
 async def test_semantic_groups_similar_sentences():
     text = "Cats purr softly. Cats purr loudly. Rockets need fuel."
     chunks = await SemanticSplitter(similarity_threshold=0.3, embedder=HashEmbedder()).split(
-        Document(text, id="d"))
+        Document(text, id="d")
+    )
     assert len(chunks) == 2 and "Rockets" in chunks[1].text
 ```
 ```python
 # tests/test_testing.py
 from astromesh_rag.testing import FakeLLM, HashEmbedder
 
+
 async def test_hash_embedder_is_deterministic_and_normalized():
     a, b = await HashEmbedder().embed(["red apple", "red apple"])
     assert a == b and abs(sum(x * x for x in a) - 1) < 1e-9
+
 
 async def test_fake_llm_matches_by_substring():
     llm = FakeLLM({"rewrite": "v1\nv2"}, default="none")
@@ -261,15 +283,24 @@ async def test_fake_llm_matches_by_substring():
 ```python
 from astromesh_rag.types import Chunk
 
+
 def chunks(doc, texts, **meta):
-    return [Chunk(id=f"{doc}#{i}", doc_id=doc, text=t, metadata=dict(meta)) for i, t in enumerate(texts)]
+    return [
+        Chunk(id=f"{doc}#{i}", doc_id=doc, text=t, metadata=dict(meta)) for i, t in enumerate(texts)
+    ]
+
 
 async def index_contract(index):
     await index.upsert(chunks("a", ["x", "y"], lang="es"), [[1, 0, 0], [0, 1, 0]])
     await index.upsert(chunks("b", ["z"], lang="en"), [[0, 0, 1]])
     hits = await index.search([1, 0.1, 0], 2)
-    assert hits[0].chunk.id == "a#0" and hits[0].source == "vector" and hits[0].score > hits[1].score
-    assert [h.chunk.id for h in await index.search([0, 0, 1], 5, {"lang": "es"})] in (["a#1", "a#0"], ["a#0", "a#1"])
+    assert (
+        hits[0].chunk.id == "a#0" and hits[0].source == "vector" and hits[0].score > hits[1].score
+    )
+    assert [h.chunk.id for h in await index.search([0, 0, 1], 5, {"lang": "es"})] in (
+        ["a#1", "a#0"],
+        ["a#0", "a#1"],
+    )
     await index.delete_document("a")
     assert {h.chunk.doc_id for h in await index.search([1, 1, 1], 5)} == {"b"}
 ```
@@ -302,34 +333,50 @@ from astromesh_rag.llms import OpenAICompatLLM
 from astromesh_rag.rerankers import CohereReranker
 from astromesh_rag.types import Chunk, Hit
 
+
 @respx.mock
 async def test_ollama_batches_in_one_call():
     route = respx.post("http://o/api/embed").mock(
-        return_value=httpx.Response(200, json={"embeddings": [[1.0], [2.0]]}))
+        return_value=httpx.Response(200, json={"embeddings": [[1.0], [2.0]]})
+    )
     assert await OllamaEmbedder(endpoint="http://o").embed(["a", "b"]) == [[1.0], [2.0]]
     assert route.call_count == 1
 
+
 @respx.mock
 async def test_openai_compat_returns_message_and_usage():
-    respx.post("http://gw/v1/chat/completions").mock(return_value=httpx.Response(200, json={
-        "choices": [{"message": {"content": "hola"}}], "usage": {"total_tokens": 7}}))
+    respx.post("http://gw/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200, json={"choices": [{"message": {"content": "hola"}}], "usage": {"total_tokens": 7}}
+        )
+    )
     llm = OpenAICompatLLM("http://gw/v1", "k", "kimi")
     assert await llm.complete("hi") == "hola" and llm.usage == [{"total_tokens": 7}]
 
+
 @respx.mock
 async def test_openai_compat_omits_temperature_when_none():
-    route = respx.post("http://gw/v1/chat/completions").mock(return_value=httpx.Response(
-        200, json={"choices": [{"message": {"content": ""}}]}))
+    route = respx.post("http://gw/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": ""}}]})
+    )
     await OpenAICompatLLM("http://gw/v1", "k", "m", temperature=None).complete("x")
     assert "temperature" not in route.calls[0].request.content.decode()
 
+
 @respx.mock
 async def test_cohere_rerank_keeps_details():
-    respx.post("https://api.cohere.ai/v1/rerank").mock(return_value=httpx.Response(
-        200, json={"results": [{"index": 1, "relevance_score": 0.9}]}))
-    hits = [Hit(Chunk(f"d#{i}", "d", t), 0.1, "vector", {"vector": 0.1}) for i, t in enumerate("ab")]
+    respx.post("https://api.cohere.ai/v1/rerank").mock(
+        return_value=httpx.Response(200, json={"results": [{"index": 1, "relevance_score": 0.9}]})
+    )
+    hits = [
+        Hit(Chunk(f"d#{i}", "d", t), 0.1, "vector", {"vector": 0.1}) for i, t in enumerate("ab")
+    ]
     out = await CohereReranker(api_key="k").rerank("q", hits, 1)
-    assert out[0].chunk.text == "b" and out[0].score == 0.9 and out[0].details == {"vector": 0.1, "rerank": 0.9}
+    assert (
+        out[0].chunk.text == "b"
+        and out[0].score == 0.9
+        and out[0].details == {"vector": 0.1, "rerank": 0.9}
+    )
 ```
 Integration `test_sentence_transformers.py` (importorskip): embeds two texts, dimension 384; cross-encoder ranks "Paris is the capital of France" above "Bananas are yellow" for "capital of France".
 - [ ] **Step 2–4:** run → fail; implement; run → pass; ruff clean.
@@ -367,23 +414,33 @@ from astromesh_rag.indexes import MemoryIndex
 from astromesh_rag.testing import HashEmbedder
 from astromesh_rag.types import Chunk, Hit
 
-def C(i, t): return Chunk(f"d{i}#0", f"d{i}", t)
+
+def C(i, t):
+    return Chunk(f"d{i}#0", f"d{i}", t)
+
 
 def test_tokenize_keeps_codes_and_strips_accents():
     toks = tokenize("Error ERR-4012 en facturación")
     assert "err-4012" in toks and "facturacion" in toks
 
+
 async def test_bm25_finds_exact_code():
     bm = BM25Index()
-    await bm.add([C(1, "billing failed with ERR-4012"), C(2, "billing works fine"), C(3, "ERR-5000 timeout")])
+    await bm.add(
+        [C(1, "billing failed with ERR-4012"), C(2, "billing works fine"), C(3, "ERR-5000 timeout")]
+    )
     hits = await bm.retrieve("what is ERR-4012", 2)
     assert hits[0].chunk.doc_id == "d1" and hits[0].source == "bm25"
 
+
 async def test_bm25_delete_and_persist(tmp_path):
     bm = BM25Index(path=str(tmp_path / "bm25.json"))
-    await bm.add([C(1, "alpha"), C(2, "beta")]); await bm.delete_document("d1"); bm.save()
+    await bm.add([C(1, "alpha"), C(2, "beta")])
+    await bm.delete_document("d1")
+    bm.save()
     again = BM25Index.load(str(tmp_path / "bm25.json"))
     assert [h.chunk.doc_id for h in await again.retrieve("alpha beta", 5)] == ["d2"]
+
 
 def test_rrf_rewards_agreement():
     a = [Hit(C(1, "x"), 0.9, "vector"), Hit(C(2, "y"), 0.8, "vector")]
@@ -391,10 +448,12 @@ def test_rrf_rewards_agreement():
     out = RRF().fuse([a, b], 3)
     assert out[0].chunk.id == "d2#0" and out[0].source == "bm25+vector" and "rrf" in out[0].details
 
+
 def test_weighted_fusion_respects_weights():
     a = [Hit(C(1, "x"), 1.0, "vector"), Hit(C(2, "y"), 0.0, "vector")]
     b = [Hit(C(2, "y"), 1.0, "bm25"), Hit(C(1, "x"), 0.0, "bm25")]
     assert WeightedFusion([0.9, 0.1]).fuse([a, b], 1)[0].chunk.id == "d1#0"
+
 
 async def test_vector_retriever_threshold():
     idx, emb = MemoryIndex(), HashEmbedder()
@@ -440,31 +499,41 @@ from astromesh_rag.splitters import RecursiveSplitter
 from astromesh_rag.testing import HashEmbedder
 from astromesh_rag.types import Document
 
+
 def make(hybrid=False):
     emb, idx, bm = HashEmbedder(), MemoryIndex(), BM25Index()
-    ing = IngestPipeline(RecursiveSplitter(chunk_size=40, overlap=0), emb, idx, bm if hybrid else None)
+    ing = IngestPipeline(
+        RecursiveSplitter(chunk_size=40, overlap=0), emb, idx, bm if hybrid else None
+    )
     rets = [VectorRetriever(emb, idx)] + ([bm] if hybrid else [])
     return Pipeline(ing, QueryPipeline(rets)), idx
+
 
 async def test_two_documents_both_survive():
     p, _ = make()
     await p.ingest([Document("apples are red", id="a"), Document("bananas are yellow", id="b")])
     assert {h.chunk.doc_id for h in (await p.query("are", 10)).hits} == {"a", "b"}
 
+
 async def test_reingest_with_fewer_chunks_removes_stale():
     p, idx = make()
-    await p.ingest([Document("one two three four five six seven eight nine ten eleven twelve", id="a")])
+    await p.ingest(
+        [Document("one two three four five six seven eight nine ten eleven twelve", id="a")]
+    )
     await p.ingest([Document("short", id="a")])
     assert [h.chunk.id for h in (await p.query("short one two", 10)).hits] == ["a#0"]
+
 
 async def test_query_empty_index():
     p, _ = make()
     r = await p.query("anything")
     assert r.hits == [] and r.context == ""
 
+
 async def test_query_blank_string():
     p, _ = make()
     assert (await p.query("   ")).hits == []
+
 
 async def test_trace_records_each_stage():
     p, _ = make(hybrid=True)
@@ -472,9 +541,13 @@ async def test_trace_records_each_stage():
     stages = [t["stage"] for t in (await p.query("ERR-4012")).trace]
     assert stages.count("retrieve") == 2 and "fuse" in stages
 
+
 class Boom:
     name = "boom"
-    async def retrieve(self, q, k): raise RuntimeError("down")
+
+    async def retrieve(self, q, k):
+        raise RuntimeError("down")
+
 
 async def test_hybrid_survives_one_failing_retriever():
     p, idx = make()
@@ -482,6 +555,7 @@ async def test_hybrid_survives_one_failing_retriever():
     q = QueryPipeline([p.query_pipeline.retrievers[0], Boom()])
     r = await q.query("apples")
     assert r.hits and any(t.get("error") for t in r.trace)
+
 
 async def test_all_retrievers_failing_raises():
     with pytest.raises(StageError):
@@ -526,16 +600,20 @@ from astromesh_rag.indexes import MemoryIndex
 from astromesh_rag.patterns import hyde, multi_query
 from astromesh_rag.testing import FakeLLM, HashEmbedder
 
+
 async def test_multi_query_issues_variants_plus_original():
     llm = FakeLLM({"Rewrite": "1. cargo duplicado\n2. doble cobro\n"})
     q = multi_query(HashEmbedder(), MemoryIndex(), llm, variants=2)
     r = await q.query("me cobraron dos veces")
     assert sum(t["stage"] == "retrieve" for t in r.trace) == 3 and len(llm.calls) == 1
 
+
 async def test_hyde_searches_with_hypothetical_text():
     llm = FakeLLM({"passage": "A duplicate charge is refunded in 5 days."})
     r = await hyde(HashEmbedder(), MemoryIndex(), llm).query("double charge?")
     assert any(t["stage"] == "transform" for t in r.trace)
+
+
 # tests/test_spec.py
 import pytest, yaml
 from pathlib import Path
@@ -545,6 +623,7 @@ from astromesh_rag.types import Document
 
 FIX = Path(__file__).parent / "fixtures" / "product-knowledge.rag.yaml"
 
+
 def raw(**retrieval):
     d = yaml.safe_load(FIX.read_text())
     d["spec"]["embeddings"] = {"provider": "hash"}
@@ -553,9 +632,11 @@ def raw(**retrieval):
     d["spec"]["retrieval"].update(retrieval)
     return d
 
+
 def test_core_yaml_loads_unchanged():
     spec = load_spec(yaml.safe_load(FIX.read_text()))
     assert spec.name == "product-knowledge" and spec.vector_store["backend"] == "pgvector"
+
 
 async def test_core_yaml_builds_and_answers_in_core_shape():
     p = build(load_spec(raw(similarity_threshold=0.0)))
@@ -563,20 +644,25 @@ async def test_core_yaml_builds_and_answers_in_core_shape():
     items = (await p.query("product docs", 3)).to_list()
     assert items and set(items[0]) >= {"doc_id", "content", "metadata", "score"}
 
+
 def test_llm_pattern_without_llm_fails_at_build():
     with pytest.raises(SpecError, match="needs an llm"):
         build(load_spec(raw(pattern="hyde")))
+
 
 def test_unknown_pattern_lists_known():
     with pytest.raises(SpecError, match="hybrid"):
         build(load_spec(raw(pattern="nope")))
 
+
 def test_wrong_kind_rejected():
     with pytest.raises(SpecError):
         load_spec({"kind": "Agent", "metadata": {"name": "x"}})
 
+
 def test_section_must_be_mapping():
-    d = raw(); d["spec"]["vector_store"] = "faiss"
+    d = raw()
+    d["spec"]["vector_store"] = "faiss"
     with pytest.raises(SpecError):
         load_spec(d)
 ```
@@ -597,23 +683,29 @@ def test_section_must_be_mapping():
 import math, pytest
 from astromesh_rag.metrics import dedupe, hit_rate_at_k, mrr, ndcg_at_k, precision_at_k, recall_at_k
 
-R = ["d3", "d1", "d7", "d2"]; REL = {"d1", "d2"}
+R = ["d3", "d1", "d7", "d2"]
+REL = {"d1", "d2"}
+
 
 def test_recall_precision():
     assert recall_at_k(R, REL, 2) == 0.5 and precision_at_k(R, REL, 2) == 0.5
     assert recall_at_k(R, REL, 4) == 1.0
 
+
 def test_mrr_first_relevant_at_rank_2():
     assert mrr(R, REL) == 0.5 and mrr(R, {"zz"}) == 0.0
+
 
 def test_ndcg():
     dcg = 1 / math.log2(3) + 1 / math.log2(5)
     idcg = 1 / math.log2(2) + 1 / math.log2(3)
     assert ndcg_at_k(R, REL, 4) == pytest.approx(dcg / idcg)
 
+
 def test_hit_rate_and_dedupe():
     assert hit_rate_at_k(R, REL, 1) == 0.0 and hit_rate_at_k(R, REL, 2) == 1.0
     assert dedupe(["a", "a", "b"]) == ["a", "b"]
+
 
 def test_empty_relevant_rejected():
     with pytest.raises(ValueError):
@@ -649,28 +741,42 @@ Templates are hand-written strings in `generate.py` combined from small vocab li
 # tests/test_corpus.py
 import json
 from pathlib import Path
+
 C = Path(__file__).parents[1] / "examples" / "corpus"
+
 
 def test_corpus_regenerates_identically(tmp_path):
     import runpy, sys
+
     sys.argv = ["generate.py", str(tmp_path / "c.jsonl")]
     runpy.run_path(str(C / "generate.py"), run_name="__main__")
     assert (tmp_path / "c.jsonl").read_bytes() == (C / "corpus.jsonl").read_bytes()
 
+
 def test_queries_reference_real_docs_and_cover_types():
     ids = {json.loads(l)["id"] for l in (C / "corpus.jsonl").read_text().splitlines()}
     qs = [json.loads(l) for l in (C / "queries.jsonl").read_text().splitlines()]
-    assert len(qs) >= 60 and {q["type"] for q in qs} == {"exact", "paraphrase", "distractor", "noise"}
+    assert len(qs) >= 60 and {q["type"] for q in qs} == {
+        "exact",
+        "paraphrase",
+        "distractor",
+        "noise",
+    }
     assert all(set(q["relevant"]) <= ids and q["relevant"] for q in qs)
+
+
 # tests/test_benchmark_smoke.py
 import json, runpy, sys
 from pathlib import Path
+
 
 def test_benchmark_runs_offline(tmp_path, monkeypatch):
     for v in ("RAG_BENCH_BASE_URL", "RAG_BENCH_API_KEY"):
         monkeypatch.delenv(v, raising=False)
     sys.argv = ["benchmark.py", "--embedder", "hash", "--rerank", "off", "--out", str(tmp_path)]
-    runpy.run_path(str(Path(__file__).parents[1] / "examples" / "benchmark.py"), run_name="__main__")
+    runpy.run_path(
+        str(Path(__file__).parents[1] / "examples" / "benchmark.py"), run_name="__main__"
+    )
     data = json.loads(next(tmp_path.glob("*.json")).read_text())
     assert {r["pattern"] for r in data["summary"]} == {"naive", "hybrid", "multi_query", "hyde"}
     assert "api_key" not in json.dumps(data).lower()
@@ -731,8 +837,12 @@ def test_benchmark_runs_offline(tmp_path, monkeypatch):
 from astromesh.rag.factory import build_pipeline
 from astromesh.rag.loader import spec_from_raw
 
-RAW = {"kind": "RAGPipeline", "metadata": {"name": "t"}, "spec": {
-    "embeddings": {"provider": "hash"}, "vector_store": {"backend": "memory"}}}
+RAW = {
+    "kind": "RAGPipeline",
+    "metadata": {"name": "t"},
+    "spec": {"embeddings": {"provider": "hash"}, "vector_store": {"backend": "memory"}},
+}
+
 
 async def test_second_ingest_does_not_overwrite_first():
     p = build_pipeline(spec_from_raw(RAW))
@@ -741,14 +851,18 @@ async def test_second_ingest_does_not_overwrite_first():
     contents = {c["content"] for c in (await p.query("are", top_k=10)).chunks}
     assert contents == {"apples are red", "bananas are yellow"}
 
+
 def test_spec_errors_stay_value_errors():
     import pytest
+
     with pytest.raises(ValueError):
         spec_from_raw({"kind": "Agent"})
+
 
 def test_native_chunker_registered_when_available():
     from astromesh_rag import registry
     import astromesh.rag  # noqa: F401  registers
+
     assert "recursive" in registry.names("splitter")
 ```
 - [ ] **Step 2:** `uv run pytest tests/test_rag_library.py` → fail.
