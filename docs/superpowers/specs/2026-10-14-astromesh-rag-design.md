@@ -186,9 +186,20 @@ only both failing raises. `AgentRAG` keeps its contract: never fails a run.
 - Core: the full suite stays green after migration.
 
 **Documentation.**
-- Repo: `README.md` (mermaid mindmap of stages and patterns, one flowchart per pattern,
-  quickstart), `README.es.md`, `docs/patterns.md`, `docs/spec.md` (YAML reference),
+- Repo: `README.md`, `README.es.md`, `docs/patterns.md`, `docs/spec.md` (YAML reference),
   `docs/extending.md`, `CHANGELOG.md`, `CONTRIBUTING.md`.
+- **The README is a first-class deliverable** (user requirement): visually polished and
+  well explained, built with the `frontend-design` skill and checked by rendering every
+  diagram (no syntax errors, no clipped labels) before commit. It must contain, in order:
+  logo; one-line pitch; badges (layer first, per the ecosystem badge grammar); a short
+  explanation of the RAG lifecycle in plain language; a **Mermaid mindmap** of the library
+  (lifecycle stages, patterns, integrations, extension points) themed with the Astromesh
+  palette as in the `astromesh-sdd` README; a **flowchart per pattern** (naive, hybrid,
+  multi_query, hyde) next to a table "when to use it / what it costs / needs an LLM?";
+  a **sequence diagram** of one hybrid query showing each stage and the `trace`; a
+  quickstart in Python and in YAML; the extras table; "make it yours" (registry);
+  "how Astromesh uses it"; roadmap; contributing; license. The Spanish README mirrors it
+  with translated diagram labels.
 - docs-site: a "RAG" section — Introduction (the lifecycle, when to use which pattern),
   Patterns, Pipeline YAML reference, Extending, How Astromesh uses it; `ecosystem.ts`
   entry (sector chosen at docs time; the library sits under the runtime's knowledge layer,
