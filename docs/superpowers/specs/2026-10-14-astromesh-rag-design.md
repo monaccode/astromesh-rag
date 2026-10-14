@@ -80,7 +80,10 @@ astromesh_rag/
 - **Stable ids.** Chunk id = `f"{doc_id}#{n}"`. `doc_id` comes from the `Document`, else a
   SHA-256 prefix of its text. Ingesting a `doc_id` first deletes that document's previous
   chunks (`VectorIndex.delete_document(doc_id)`), so re-ingestion replaces.
-- **Async everywhere**, matching the core. Synchronous libraries are called through
+- **Async everywhere**, matching the core. Known core bugs fixed in the port: Qdrant point
+  ids become UUIDv5 of the chunk id (Qdrant rejects `doc_0`); pgvector filters are bound
+  parameters, not interpolated SQL; Chroma collections use cosine space; `semantic`
+  chunking actually uses an embedder (from YAML it silently fell back to `sentence`). Synchronous libraries are called through
   `asyncio.to_thread`.
 - **Python ≥ 3.10**, like `astromesh-okf`.
 
@@ -102,7 +105,7 @@ class QueryResult:
 
 | Stage | Signature |
 |---|---|
-| `Splitter` | `split(doc: Document) -> list[Chunk]` (sync; pure CPU) |
+| `Splitter` | `async split(doc: Document) -> list[Chunk]` (async so `semantic` can use the pipeline's embedder) |
 | `Embedder` | `async embed(texts: list[str]) -> list[list[float]]`, `dimension: int \| None` |
 | `VectorIndex` | `async upsert(chunks, vectors)`, `async search(vector, k, filters) -> list[Hit]`, `async delete_document(doc_id)` |
 | `Retriever` | `async retrieve(query: str, k: int) -> list[Hit]` |
@@ -123,7 +126,7 @@ Existing files keep working unchanged. New optional keys under `spec.retrieval`:
 ```yaml
 retrieval:
   top_k: 5
-  similarity_threshold: 0.7     # today inert → now a min_score Filter after rerank
+  similarity_threshold: 0.7     # today inert → drops vector hits whose cosine is below it
   pattern: naive                # naive (default) | hybrid | multi_query | hyde
   hybrid:      { weights: [0.5, 0.5], fusion: rrf }   # rrf (default) | weighted
   multi_query: { variants: 3 }
@@ -132,8 +135,8 @@ retrieval:
 
 | Pattern | Query flow | LLM |
 |---|---|---|
-| `naive` | vector → rerank? → filter → context | no |
-| `hybrid` | vector ∥ bm25 → fusion → rerank? → filter → context | no |
+| `naive` | vector (threshold) → rerank? → top_k → context | no |
+| `hybrid` | vector (threshold) ∥ bm25 → fusion → rerank? → top_k → context | no |
 | `multi_query` | LLM → N variants (+ original) → vector per variant → RRF → rerank? → filter | yes |
 | `hyde` | LLM writes a hypothetical answer → embed it → vector → rerank? → filter | yes |
 
@@ -143,7 +146,7 @@ retrieval:
   `SpecError` at build time, not at the first query. Prompts are module constants,
   overridable by argument.
 - **No silently inert fields.** Today two keys are accepted and ignored:
-  `retrieval.similarity_threshold` (now a `min_score` filter) and `reranking.top_k` (now
+  `retrieval.similarity_threshold` (now drops vector hits below that cosine; it is not applied after reranking because cross-encoder scores are not on a 0–1 scale) and `reranking.top_k` (now
   caps the reranker's output; defaults to `retrieval.top_k`). Unknown keys are kept
   tolerated, as today: provider sections carry provider-specific keys, and specs created
   from Forge or Cortex must keep loading.
