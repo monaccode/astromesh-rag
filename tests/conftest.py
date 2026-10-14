@@ -1,3 +1,7 @@
+import os
+
+import pytest
+
 from astromesh_rag.types import Chunk
 
 
@@ -21,3 +25,13 @@ async def index_contract(index):
     )
     await index.delete_document("a")
     assert {h.chunk.doc_id for h in await index.search([1, 1, 1], 5)} == {"b"}
+
+
+def require_env(name, default=None):
+    """Env value for an integration test. Unset: skip, or fail if RAG_REQUIRE_INTEGRATION=1."""
+    value = os.environ.get(name, default)
+    if value:
+        return value
+    if os.environ.get("RAG_REQUIRE_INTEGRATION") == "1":
+        pytest.fail(f"{name} not set but RAG_REQUIRE_INTEGRATION=1")
+    pytest.skip(f"{name} not set")

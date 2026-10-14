@@ -1,8 +1,7 @@
-import os
 import uuid
 
 import pytest
-from conftest import chunks, index_contract
+from conftest import chunks, index_contract, require_env
 
 pytest.importorskip("asyncpg")
 
@@ -10,10 +9,7 @@ from astromesh_rag.indexes.pgvector import PgVectorIndex
 
 
 def _index():
-    dsn = os.environ.get("PG_DSN")
-    if not dsn:
-        pytest.skip("PG_DSN not set")
-    return PgVectorIndex(dsn=dsn, table=f"t_{uuid.uuid4().hex}", dimension=3)
+    return PgVectorIndex(dsn=require_env("PG_DSN"), table=f"t_{uuid.uuid4().hex}", dimension=3)
 
 
 async def test_pgvector_contract():
