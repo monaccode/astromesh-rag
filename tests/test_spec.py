@@ -89,3 +89,15 @@ def test_import_registers_builtins_without_extras():
 
     assert "pgvector" in registry.names("index")
     assert "hash" in registry.names("embedder")
+
+
+async def test_bm25_path_persists_and_reloads(tmp_path):
+    path = tmp_path / "bm25.json"
+    spec = load_spec(raw(pattern="hybrid", bm25_path=str(path)))
+    p = build(spec)
+    await p.ingest([Document("error ERR-4012 means refund", id="p")])
+    assert path.exists()
+    p2 = build(spec)
+    bm25 = p2.query_pipeline.retrievers[1]
+    hits = await bm25.retrieve("ERR-4012", 3)
+    assert [h.chunk.doc_id for h in hits] == ["p"]

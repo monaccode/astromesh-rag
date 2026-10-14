@@ -40,6 +40,8 @@ class IngestPipeline:
             if self.keyword_index is not None and chunks:
                 await self.keyword_index.add(chunks)
             total += len(chunks)
+        if getattr(self.keyword_index, "path", None):
+            self.keyword_index.save()
         return total
 
 

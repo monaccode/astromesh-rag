@@ -71,7 +71,10 @@ def build(spec: RAGSpec, *, llm=None, registry=default_registry) -> Pipeline:
         "splitter", spec.chunking.get("strategy", "recursive"), spec.chunking, ctx
     )
     index = registry.build("index", vs.get("backend", "faiss"), vs, ctx)
-    bm25 = BM25Index(path=rt.get("bm25_path")) if pattern == "hybrid" else None
+    bm25 = None
+    if pattern == "hybrid":
+        path = rt.get("bm25_path")
+        bm25 = BM25Index.load(path) if path and Path(path).exists() else BM25Index(path=path)
     reranker = None
     if rr.get("enabled"):
         reranker = registry.build("reranker", rr.get("provider", "cross_encoder"), rr, ctx)
