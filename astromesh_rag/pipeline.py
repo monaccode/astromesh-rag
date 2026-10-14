@@ -93,20 +93,22 @@ class QueryPipeline:
 
         async def one(q, r):
             t0 = time.perf_counter()
-            return t0, await r.retrieve(q, n)
+            try:
+                hits = await r.retrieve(q, n)
+            except Exception as exc:  # noqa: BLE001 - recorded in the trace
+                return None, (time.perf_counter() - t0) * 1000, exc
+            return hits, (time.perf_counter() - t0) * 1000, None
 
         pairs = [(q, r) for q in queries for r in self.retrievers]
-        outs = await asyncio.gather(*(one(q, r) for q, r in pairs), return_exceptions=True)
+        outs = await asyncio.gather(*(one(q, r) for q, r in pairs))
         lists, last_exc = [], None
-        for (_, r), out in zip(pairs, outs, strict=True):
-            if isinstance(out, BaseException):
-                if not isinstance(out, Exception):
-                    raise out
-                last_exc = out
-                log("retrieve", r, time.perf_counter(), 1, 0, str(out))
+        for (_, r), (hits, ms, exc) in zip(pairs, outs, strict=True):
+            e = {"stage": "retrieve", "name": _name(r), "ms": ms, "in": 1}
+            if exc is not None:
+                last_exc = exc
+                trace.append({**e, "out": 0, "error": str(exc)})
             else:
-                t0, hits = out
-                log("retrieve", r, t0, 1, len(hits))
+                trace.append({**e, "out": len(hits)})
                 lists.append(hits)
         if not lists:
             names = ",".join(_name(r) for r in self.retrievers)
