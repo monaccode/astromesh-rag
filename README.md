@@ -322,8 +322,7 @@ Every key and default: **[docs/spec.md](https://github.com/monaccode/astromesh-r
 
 Splitters, BM25, fusion, the `memory` index and the test doubles need nothing beyond
 PyYAML. Everything else is an extra; a missing one raises `MissingExtraError` with the
-exact `pip install 'astromesh-rag[...]'` to run, when the pipeline is built (pgvector: on
-first use).
+exact `pip install 'astromesh-rag[...]'` to run, when the pipeline is built.
 
 | Extra | Installs | Unlocks |
 |---|---|---|
@@ -333,7 +332,7 @@ first use).
 | `faiss` | `faiss-cpu`, `numpy` | `vector_store.backend: faiss` |
 | `chroma` | `chromadb` | `vector_store.backend: chroma` |
 | `qdrant` | `qdrant-client` | `vector_store.backend: qdrant` |
-| `pgvector` | `asyncpg` | `vector_store.backend: pgvector` (checked on first use) |
+| `pgvector` | `asyncpg` | `vector_store.backend: pgvector` |
 | `cohere` | `httpx` | `reranking.provider: cohere` |
 | `openai` | `httpx` | `OpenAICompatLLM` for `multi_query` and `hyde` |
 | `all` | all of the above | everything |

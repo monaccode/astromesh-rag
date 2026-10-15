@@ -53,4 +53,21 @@ Relative to the RAG implementation in the Astromesh core this library was extrac
 - `retrieval.similarity_threshold` and `reranking.top_k` were accepted and ignored. The
   threshold now drops vector hits below that cosine (never applied to reranker scores),
   and `reranking.top_k` caps the reranker's output.
+- Qdrant: metadata keys named `content`, `doc_id` or `chunk_id` overwrote the chunk's text
+  and ids, breaking search results and re-ingestion; they can no longer clobber them.
+- pgvector: concurrent first calls opened several connection pools; a missing `asyncpg` is
+  now reported when the pipeline is built, not on first use; non-string metadata filters
+  (`true`, numbers) now match their JSON form.
+- `retrieval.top_k` now sets how many hits `Pipeline.query()` returns by default (an explicit
+  `k` still overrides it), and `retrieval.multi_query.variants` is read as the spec documents.
+- Re-ingesting a document no longer loses it when the embedder fails: the new chunks are
+  embedded before the old ones are deleted.
+- Query errors with an empty message now show the exception type in the trace.
+- OpenAI-compatible and Cohere HTTP errors include the response body (truncated, never
+  headers or the API key).
+- sentence-transformers: no `FutureWarning` on recent versions, and the model loads once
+  under concurrent first calls (embedder and cross-encoder).
+- `BM25Index.save()` writes atomically.
+- `retrieval.fusion` is validated at build time (`rrf` or `weighted`; `weighted` takes two
+  weights, default `[0.5, 0.5]`) as a `SpecError`.
 - `overlap >= chunk_size` hung the splitter; it is now a `SpecError` at build time.

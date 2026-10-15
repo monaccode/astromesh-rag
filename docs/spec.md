@@ -112,7 +112,7 @@ same thing on all of them.
 | `faiss` | `dimensions` (the embedding dimension) | In-process exact search (`IndexFlatIP` over normalized vectors); not persisted. Note the plural key |
 | `chroma` | `collection` (`astromesh`), `host`, `port` (`8000`), `persist_directory` | `host` connects to a server; else `persist_directory` stores on disk; else in memory. Collections use cosine space |
 | `qdrant` | `collection` (`astromesh`), `url` (`http://localhost:6333`), `api_key` | `url: ":memory:"` runs an in-process instance. Creates the collection with cosine distance if it does not exist. Point ids are UUIDv5 of the chunk id |
-| `pgvector` | `dsn`, or `connection` with `host` (`localhost`), `port` (`5432`), `database`, `user`, `password` (all `astromesh`); `collection` (`embeddings`) | `collection` is the table name. On first use it runs `CREATE EXTENSION IF NOT EXISTS vector` and creates the table and a `doc_id` index. Filters are bound parameters |
+| `pgvector` | `dsn`, or `connection` with `host` (`localhost`), `port` (`5432`), `database`, `user`, `password` (all `astromesh`); `collection` (`embeddings`) | `collection` is the table name. On first query or ingest it runs `CREATE EXTENSION IF NOT EXISTS vector` and creates the table and a `doc_id` index. Filters are bound parameters |
 
 Re-ingesting a document deletes its previous chunks first, on every backend, so the index
 never holds two versions of one document.
@@ -135,17 +135,16 @@ The reranker sees every candidate (up to `retrieval.candidates`) and replaces ea
 | Key | Default | Effect |
 |---|---|---|
 | `pattern` | `naive` | `naive`, `hybrid`, `multi_query`, `hyde`. See [patterns.md](patterns.md) |
-| `top_k` | `5` | Sizes `candidates` and `reranking.top_k` when they are not set |
+| `top_k` | `5` | Default number of hits `query()` returns; also sizes `candidates` and `reranking.top_k` when they are not set |
 | `candidates` | `top_k * 2` | How many hits each retriever fetches, per query, before fusion and reranking |
 | `similarity_threshold` | none | Drops vector hits whose cosine is below this |
 | `hybrid.fusion` | `rrf` | `hybrid` only: `rrf` or `weighted`. Also accepted as `retrieval.fusion`, which wins if both are set |
-| `hybrid.weights` | none | `hybrid` only: `[vector, bm25]` weights for `weighted` fusion. `weighted` without `weights` falls back to RRF |
+| `hybrid.weights` | none | `hybrid` only: `[vector, bm25]` weights for `weighted` fusion. Exactly two weights; defaults to `[0.5, 0.5]` |
 | `bm25_path` | none | `hybrid` only: a JSON file for the BM25 index, loaded at build time if it exists and rewritten after every ingestion |
-| `variants` | `3` | `multi_query` only: how many rewrites to ask the LLM for |
+| `multi_query.variants` | `3` | `multi_query` only: how many rewrites to ask the LLM for. The flat form `retrieval.variants` is also accepted; the nested one wins |
 
-**How many hits come back** is the `k` you pass to `pipeline.query(q, k=...)` (default 5),
-not `retrieval.top_k`. Pass `k=spec.retrieval.get("top_k", 5)` if you want the file to
-decide.
+**How many hits come back** is `retrieval.top_k` by default; an explicit
+`pipeline.query(q, k=...)` overrides it.
 
 **`similarity_threshold`** filters inside the vector retriever, before fusion and before
 reranking, with the cosine the index returned. It never touches BM25 hits, and it is never

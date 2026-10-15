@@ -340,7 +340,7 @@ uso).
 | `faiss` | `faiss-cpu`, `numpy` | `vector_store.backend: faiss` |
 | `chroma` | `chromadb` | `vector_store.backend: chroma` |
 | `qdrant` | `qdrant-client` | `vector_store.backend: qdrant` |
-| `pgvector` | `asyncpg` | `vector_store.backend: pgvector` (se verifica al primer uso) |
+| `pgvector` | `asyncpg` | `vector_store.backend: pgvector` |
 | `cohere` | `httpx` | `reranking.provider: cohere` |
 | `openai` | `httpx` | `OpenAICompatLLM` para `multi_query` y `hyde` |
 | `all` | todo lo anterior | todo |

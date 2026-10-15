@@ -27,6 +27,19 @@ async def index_contract(index):
     assert {h.chunk.doc_id for h in await index.search([1, 1, 1], 5)} == {"b"}
 
 
+async def collision_contract(index):
+    """Metadata keys named like the index's own fields must not clobber them."""
+    evil = {"doc_id": "x", "content": "y", "chunk_id": "z"}
+    await index.upsert(chunks("a", ["one", "two"], **evil), [[1, 0, 0], [0, 1, 0]])
+    hits = await index.search([1, 0, 0], 5)
+    assert {h.chunk.text for h in hits} == {"one", "two"}
+    assert {h.chunk.doc_id for h in hits} == {"a"}
+    assert hits[0].chunk.id == "a#0"
+    await index.delete_document("a")
+    await index.upsert(chunks("a", ["one"], **evil), [[1, 0, 0]])
+    assert [h.chunk.id for h in await index.search([1, 0, 0], 5)] == ["a#0"]
+
+
 def require_env(name, default=None):
     """Env value for an integration test. Unset: skip, or fail if RAG_REQUIRE_INTEGRATION=1."""
     value = os.environ.get(name, default)

@@ -48,7 +48,7 @@ class QdrantIndex:
             PointStruct(
                 id=_point_id(c.id),
                 vector=[float(x) for x in v],
-                payload={"chunk_id": c.id, "doc_id": c.doc_id, "content": c.text, **c.metadata},
+                payload={**c.metadata, "chunk_id": c.id, "doc_id": c.doc_id, "content": c.text},
             )
             for c, v in zip(chunks, vectors, strict=True)
         ]

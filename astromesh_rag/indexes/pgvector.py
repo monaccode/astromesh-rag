@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 
@@ -20,7 +21,7 @@ def _where(filters: dict | None, start: int) -> tuple[str, list]:
     for key, value in filters.items():
         n = start + len(params)
         parts.append(f"metadata->>${n} = ${n + 1}")
-        params += [key, str(value)]
+        params += [key, value if isinstance(value, str) else json.dumps(value)]
     return "WHERE " + " AND ".join(parts), params
 
 
@@ -32,24 +33,29 @@ class PgVectorIndex:
     def __init__(self, dsn, table, dimension):
         if not _TABLE.match(table):
             raise SpecError(f"invalid pgvector table name: {table!r}")
+        self._asyncpg = require("asyncpg", "pgvector")
         self.dsn, self.table, self.dimension = dsn, table, dimension
         self._pool = None
+        self._lock = asyncio.Lock()
 
     async def _get_pool(self):
         if self._pool is None:
-            asyncpg = require("asyncpg", "pgvector")
-            pool = await asyncpg.create_pool(self.dsn)
-            async with pool.acquire() as conn:
-                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                await conn.execute(
-                    f"CREATE TABLE IF NOT EXISTS {self.table} ("
-                    f"chunk_id TEXT PRIMARY KEY, doc_id TEXT, embedding vector({int(self.dimension)}), "
-                    "content TEXT, metadata JSONB)"
-                )
-                await conn.execute(
-                    f"CREATE INDEX IF NOT EXISTS {self.table}_doc_id ON {self.table} (doc_id)"
-                )
-            self._pool = pool
+            async with self._lock:
+                if self._pool is None:
+                    pool = await self._asyncpg.create_pool(self.dsn)
+                    async with pool.acquire() as conn:
+                        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                        await conn.execute(
+                            f"CREATE TABLE IF NOT EXISTS {self.table} ("
+                            f"chunk_id TEXT PRIMARY KEY, doc_id TEXT, "
+                            f"embedding vector({int(self.dimension)}), "
+                            "content TEXT, metadata JSONB)"
+                        )
+                        await conn.execute(
+                            f"CREATE INDEX IF NOT EXISTS {self.table}_doc_id "
+                            f"ON {self.table} (doc_id)"
+                        )
+                    self._pool = pool
         return self._pool
 
     async def upsert(self, chunks, vectors):
