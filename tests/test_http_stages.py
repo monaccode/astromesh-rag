@@ -1,4 +1,5 @@
 import httpx
+import pytest
 import respx
 
 from astromesh_rag.embedders import HFEmbedder, OllamaEmbedder
@@ -55,3 +56,25 @@ async def test_cohere_rerank_keeps_details():
     assert out[0].chunk.text == "b"
     assert out[0].score == 0.9
     assert out[0].details == {"vector": 0.1, "rerank": 0.9}
+
+
+@respx.mock
+async def test_openai_compat_http_error_includes_body_not_key():
+    respx.post("http://gw/v1/chat/completions").mock(
+        return_value=httpx.Response(400, json={"error": "temperature must be 1"})
+    )
+    with pytest.raises(Exception, match="temperature must be 1") as ei:
+        await OpenAICompatLLM("http://gw/v1", "sk-secret", "m").complete("x")
+    assert "sk-secret" not in str(ei.value)
+
+
+@respx.mock
+async def test_cohere_http_error_includes_truncated_body_not_key():
+    respx.post("https://api.cohere.ai/v1/rerank").mock(
+        return_value=httpx.Response(400, text="bad top_n " + "x" * 2000)
+    )
+    hits = [Hit(Chunk("d#0", "d", "a"), 0.1, "vector")]
+    with pytest.raises(Exception, match="bad top_n") as ei:
+        await CohereReranker(api_key="sk-secret").rerank("q", hits, 1)
+    assert "sk-secret" not in str(ei.value)
+    assert len(str(ei.value)) < 800

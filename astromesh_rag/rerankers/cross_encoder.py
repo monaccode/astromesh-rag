@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from dataclasses import replace
 
 from astromesh_rag._extras import require
@@ -10,14 +11,16 @@ class CrossEncoderReranker:
         self._st = require("sentence_transformers", "sentence-transformers")
         self.model_name = model
         self._model = None
+        self._lock = threading.Lock()
 
     async def rerank(self, query: str, hits: list[Hit], k: int) -> list[Hit]:
         if not hits:
             return []
 
         def run():
-            if self._model is None:
-                self._model = self._st.CrossEncoder(self.model_name)
+            with self._lock:
+                if self._model is None:
+                    self._model = self._st.CrossEncoder(self.model_name)
             return self._model.predict([[query, h.chunk.text] for h in hits])
 
         scores = await asyncio.to_thread(run)

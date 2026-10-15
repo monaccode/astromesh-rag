@@ -76,8 +76,14 @@ class BM25Index:
                 for c in self._chunks.values()
             ],
         }
-        with Path(self.path).open("w", encoding="utf-8") as f:
-            json.dump(data, f)
+        tmp = Path(f"{self.path}.tmp")
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(data, f)
+            tmp.replace(self.path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     @classmethod
     def load(cls, path: str) -> BM25Index:

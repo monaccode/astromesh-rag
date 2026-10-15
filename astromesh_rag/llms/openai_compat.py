@@ -1,4 +1,4 @@
-from astromesh_rag._extras import require
+from astromesh_rag._extras import raise_for_status, require
 
 
 class OpenAICompatLLM:
@@ -29,7 +29,7 @@ class OpenAICompatLLM:
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 timeout=self.timeout,
             )
-            r.raise_for_status()
+            raise_for_status(r)
         data = r.json()
         if data.get("usage"):
             self.usage.append(data["usage"])

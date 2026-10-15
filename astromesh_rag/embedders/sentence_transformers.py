@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 from astromesh_rag._extras import require
 
@@ -8,12 +9,16 @@ class SentenceTransformersEmbedder:
         self._st = require("sentence_transformers", "sentence-transformers")
         self.model_name = model
         self._model = None
+        self._lock = threading.Lock()
         self.dimension: int | None = None
 
     def _load(self):
-        if self._model is None:
-            self._model = self._st.SentenceTransformer(self.model_name)
-            self.dimension = self._model.get_sentence_embedding_dimension()
+        with self._lock:
+            if self._model is None:
+                m = self._st.SentenceTransformer(self.model_name)
+                dim = getattr(m, "get_embedding_dimension", None)
+                self.dimension = (dim or m.get_sentence_embedding_dimension)()
+                self._model = m
         return self._model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:

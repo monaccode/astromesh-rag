@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from astromesh_rag._extras import require
+from astromesh_rag._extras import raise_for_status, require
 from astromesh_rag.types import Hit
 
 _URL = "https://api.cohere.ai/v1/rerank"
@@ -27,7 +27,7 @@ class CohereReranker:
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 timeout=30.0,
             )
-            r.raise_for_status()
+            raise_for_status(r)
         out = [
             replace(
                 hits[i["index"]],
