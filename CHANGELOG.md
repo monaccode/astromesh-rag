@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-14
+
 ### Added
 
 - Data model (`Document`, `Chunk`, `Hit`, `QueryResult`) and async stage contracts
@@ -71,3 +73,6 @@ Relative to the RAG implementation in the Astromesh core this library was extrac
 - `retrieval.fusion` is validated at build time (`rrf` or `weighted`; `weighted` takes two
   weights, default `[0.5, 0.5]`) as a `SpecError`.
 - `overlap >= chunk_size` hung the splitter; it is now a `SpecError` at build time.
+
+[Unreleased]: https://github.com/monaccode/astromesh-rag/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/monaccode/astromesh-rag/releases/tag/v0.1.0
