@@ -74,7 +74,8 @@ astromesh_rag/
   (httpx), `openai` (httpx), `all`. Importing a component whose extra is missing raises
   `MissingExtraError("pip install 'astromesh-rag[qdrant]'")` at pipeline build time.
 - **Open registry.** `registry.register(kind, name, factory)` where `kind` is one of
-  `splitter, embedder, index, retriever, reranker, fusion, transform, filter, context`.
+  `splitter, embedder, index, reranker, llm` (retrievers, fusion and transforms are composed
+  by the patterns in Python, not looked up by name).
   A later registration under the same name replaces the earlier one — this is how the core
   puts its Rust chunker behind `splitter/recursive`.
 - **Stable ids.** Chunk id = `f"{doc_id}#{n}"`. `doc_id` comes from the `Document`, else a
@@ -138,7 +139,7 @@ retrieval:
 | `naive` | vector (threshold) → rerank? → top_k → context | no |
 | `hybrid` | vector (threshold) ∥ bm25 → fusion → rerank? → top_k → context | no |
 | `multi_query` | LLM → N variants (+ original) → vector per variant → RRF → rerank? → filter | yes |
-| `hyde` | LLM writes a hypothetical answer → embed it → vector → rerank? → filter | yes |
+| `hyde` | LLM writes a hypothetical answer → embed it and the original question → vector ×2 → RRF → rerank? → top_k | yes |
 
 - **BM25** is built during the same ingestion, in memory, persisted to `bm25_path` if set;
   `hybrid` without a BM25 index is a `SpecError` at build time.
