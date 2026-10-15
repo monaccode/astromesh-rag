@@ -101,3 +101,90 @@ async def test_bm25_path_persists_and_reloads(tmp_path):
     bm25 = p2.query_pipeline.retrievers[1]
     hits = await bm25.retrieve("ERR-4012", 3)
     assert [h.chunk.doc_id for h in hits] == ["p"]
+
+
+async def _hits(p, k=None):
+    return (await p.query("doc number", k)).hits
+
+
+async def _ingested(**retrieval):
+    p = build(load_spec(raw(similarity_threshold=0.0, **retrieval)))
+    await p.ingest([Document(f"doc number {i}", id=f"d{i}") for i in range(6)])
+    return p
+
+
+async def test_top_k_is_the_default_number_of_hits():
+    p = await _ingested(top_k=2)
+    assert len(await _hits(p)) == 2
+    assert len(await _hits(p, 4)) == 4
+
+
+@pytest.mark.parametrize(
+    "retrieval",
+    [
+        {"variants": 2},
+        {"multi_query": {"variants": 2}},
+        {"multi_query": {"variants": 2}, "variants": 5},
+    ],
+)
+def test_multi_query_variants_nested_or_flat(retrieval):
+    p = build(load_spec(raw(pattern="multi_query", **retrieval)), llm=FakeLLM(default="a"))
+    assert p.query_pipeline.transform.n == 2
+
+
+def test_multi_query_variants_default():
+    p = build(load_spec(raw(pattern="multi_query")), llm=FakeLLM(default="a"))
+    assert p.query_pipeline.transform.n == 3
+
+
+def test_unknown_fusion_is_a_spec_error():
+    with pytest.raises(SpecError, match="rrf, weighted"):
+        build(load_spec(raw(pattern="hybrid", fusion="borda")))
+
+
+@pytest.mark.parametrize("weights", [[1.0], [0.2, 0.3, 0.5], "x"])
+def test_weighted_needs_exactly_two_weights(weights):
+    with pytest.raises(SpecError, match="two weights"):
+        build(load_spec(raw(pattern="hybrid", fusion="weighted", hybrid={"weights": weights})))
+
+
+def test_weighted_builds_weighted_fusion_with_default_weights():
+    from astromesh_rag.fusion import WeightedFusion
+
+    q = build(load_spec(raw(pattern="hybrid", fusion="weighted"))).query_pipeline
+    assert isinstance(q.fusion, WeightedFusion)
+    assert q.fusion.weights == [0.5, 0.5]
+    h = {"weights": [0.7, 0.3], "fusion": "weighted"}
+    q = build(load_spec(raw(pattern="hybrid", hybrid=h))).query_pipeline
+    assert q.fusion.weights == [0.7, 0.3]
+
+
+async def test_similarity_threshold_reaches_retriever_and_filters():
+    p = build(load_spec(raw(similarity_threshold=0.99)))
+    assert p.query_pipeline.retrievers[0].min_score == 0.99
+    await p.ingest([Document("pgvector stores product docs", id="p")])
+    assert (await p.query("completely unrelated zebra")).hits == []
+
+
+async def test_reranking_top_k_caps_and_defaults_to_retrieval_top_k():
+    class Spy:
+        seen = None
+
+        async def rerank(self, q, hits, k):
+            Spy.seen = k
+            return hits[:k]
+
+    for rr_k, expect in ((1, 1), (None, 3)):
+        d = raw(top_k=3, similarity_threshold=0.0)
+        d["spec"]["reranking"] = {"enabled": False, **({"top_k": rr_k} if rr_k else {})}
+        p = build(load_spec(d))
+        assert p.query_pipeline.rerank_k == expect
+        p.query_pipeline.reranker = Spy()
+        await p.ingest([Document(f"doc number {i}", id=f"d{i}") for i in range(6)])
+        assert len(await _hits(p, 5)) == expect
+        assert Spy.seen == expect
+
+
+def test_candidates_default_to_twice_top_k_and_can_be_set():
+    assert build(load_spec(raw(top_k=4))).query_pipeline.candidates == 8
+    assert build(load_spec(raw(top_k=4, candidates=11))).query_pipeline.candidates == 11

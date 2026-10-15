@@ -17,6 +17,10 @@ def _name(obj) -> str:
     return getattr(obj, "name", None) or type(obj).__name__
 
 
+def _msg(exc: Exception) -> str:
+    return str(exc) or type(exc).__name__
+
+
 class IngestPipeline:
     def __init__(self, splitter, embedder, index, keyword_index=None, batch_size: int = 64):
         self.splitter = splitter
@@ -29,13 +33,16 @@ class IngestPipeline:
         total = 0
         for doc in docs:
             doc_id = doc.resolved_id()
+            chunks = await self.splitter.split(type(doc)(doc.text, doc_id, doc.metadata))
+            # Embed everything before deleting, so an embedder failure keeps the old version.
+            batches = []
+            for i in range(0, len(chunks), self.batch_size):
+                batch = chunks[i : i + self.batch_size]
+                batches.append((batch, await self.embedder.embed([c.text for c in batch])))
             await self.index.delete_document(doc_id)
             if self.keyword_index is not None:
                 await self.keyword_index.delete_document(doc_id)
-            chunks = await self.splitter.split(type(doc)(doc.text, doc_id, doc.metadata))
-            for i in range(0, len(chunks), self.batch_size):
-                batch = chunks[i : i + self.batch_size]
-                vectors = await self.embedder.embed([c.text for c in batch])
+            for batch, vectors in batches:
                 await self.index.upsert(batch, vectors)
             if self.keyword_index is not None and chunks:
                 await self.keyword_index.add(chunks)
@@ -84,7 +91,7 @@ class QueryPipeline:
             try:
                 extra = await self.transform.transform(query)
             except Exception as exc:
-                log("transform", self.transform, t0, 1, 0, str(exc))
+                log("transform", self.transform, t0, 1, 0, _msg(exc))
                 raise StageError("transform", _name(self.transform), exc) from exc
             queries = ([query] if self.include_original else []) + [
                 q for q in extra if not (self.include_original and q == query)
@@ -108,7 +115,7 @@ class QueryPipeline:
             e = {"stage": "retrieve", "name": _name(r), "ms": ms, "in": 1}
             if exc is not None:
                 last_exc = exc
-                trace.append({**e, "out": 0, "error": str(exc)})
+                trace.append({**e, "out": 0, "error": _msg(exc)})
             else:
                 trace.append({**e, "out": len(hits)})
                 lists.append(hits)
@@ -128,7 +135,7 @@ class QueryPipeline:
             try:
                 out = await self.reranker.rerank(query, hits, self.rerank_k or k)
             except Exception as exc:
-                log("rerank", self.reranker, t0, len(hits), 0, str(exc))
+                log("rerank", self.reranker, t0, len(hits), 0, _msg(exc))
                 raise StageError("rerank", _name(self.reranker), exc) from exc
             log("rerank", self.reranker, t0, len(hits), len(out))
             hits = out
@@ -141,12 +148,13 @@ class QueryPipeline:
 
 
 class Pipeline:
-    def __init__(self, ingest: IngestPipeline, query: QueryPipeline):
+    def __init__(self, ingest: IngestPipeline, query: QueryPipeline, default_k: int = 5):
         self.ingest_pipeline = ingest
         self.query_pipeline = query
+        self.default_k = default_k
 
     async def ingest(self, docs) -> int:
         return await self.ingest_pipeline.ingest(docs)
 
-    async def query(self, q: str, k: int = 5) -> QueryResult:
-        return await self.query_pipeline.query(q, k)
+    async def query(self, q: str, k: int | None = None) -> QueryResult:
+        return await self.query_pipeline.query(q, self.default_k if k is None else k)

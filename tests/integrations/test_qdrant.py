@@ -19,4 +19,6 @@ async def test_qdrant_contract():
 
 
 async def test_qdrant_metadata_cannot_clobber_fields():
-    await collision_contract(QdrantIndex(collection=f"c{uuid.uuid4().hex}", url=":memory:", dimension=3))
+    await collision_contract(
+        QdrantIndex(collection=f"c{uuid.uuid4().hex}", url=":memory:", dimension=3)
+    )

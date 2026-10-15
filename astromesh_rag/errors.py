@@ -15,7 +15,7 @@ class MissingExtraError(RAGError):
 
 class StageError(RAGError):
     def __init__(self, stage: str, name: str, cause: Exception):
-        super().__init__(f"{stage} '{name}' failed: {cause}")
+        super().__init__(f"{stage} '{name}' failed: {str(cause) or type(cause).__name__}")
         self.stage = stage
         self.name = name
         self.cause = cause

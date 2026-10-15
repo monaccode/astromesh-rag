@@ -176,3 +176,58 @@ async def test_batch_size_batches_embeds():
     n = await ing.ingest([Document("aaaaaaaaa " * 5, id="a")])
     assert n == 5
     assert CountingEmbedder.calls == 3
+
+
+class FlakyEmbedder(HashEmbedder):
+    fail = False
+
+    async def embed(self, texts):
+        if self.fail:
+            raise RuntimeError("embedder down")
+        return await super().embed(texts)
+
+
+async def test_failed_reingest_keeps_previous_chunks_hybrid():
+    emb, idx, bm = FlakyEmbedder(), MemoryIndex(), BM25Index()
+    ing = IngestPipeline(RecursiveSplitter(chunk_size=40, overlap=0), emb, idx, bm)
+    p = Pipeline(ing, QueryPipeline([VectorRetriever(emb, idx), bm]))
+    await p.ingest([Document("apples are red", id="a")])
+    emb.fail = True
+    with pytest.raises(RuntimeError):
+        await p.ingest([Document("pears are green", id="a")])
+    emb.fail = False
+    assert [h.chunk.text for h in (await p.query("apples red")).hits] == ["apples are red"]
+    assert [h.chunk.text for h in await bm.retrieve("apples", 5)] == ["apples are red"]
+
+
+class EmptyMsg:
+    name = "empty"
+
+    async def retrieve(self, q, k):
+        raise RuntimeError()
+
+    async def transform(self, q):
+        raise RuntimeError()
+
+    async def rerank(self, q, hits, k):
+        raise RuntimeError()
+
+
+async def test_empty_exception_message_still_names_error_in_trace():
+    p, _ = make()
+    await p.ingest([Document("apples", id="a")])
+    rets = p.query_pipeline.retrievers
+    r = await QueryPipeline([rets[0], EmptyMsg()]).query("apples")
+    assert [t["error"] for t in r.trace if t.get("error")] == ["RuntimeError"]
+    for kw in ({"transform": EmptyMsg()}, {"reranker": EmptyMsg()}):
+        with pytest.raises(StageError, match="failed: RuntimeError"):
+            await QueryPipeline(rets, **kw).query("apples")
+
+
+async def test_pipeline_default_k_applies_when_k_is_none():
+    emb, idx = HashEmbedder(), MemoryIndex()
+    ing = IngestPipeline(RecursiveSplitter(chunk_size=40, overlap=0), emb, idx)
+    p = Pipeline(ing, QueryPipeline([VectorRetriever(emb, idx)]), default_k=2)
+    await p.ingest([Document(f"doc number {i}", id=f"d{i}") for i in range(5)])
+    assert len((await p.query("doc number")).hits) == 2
+    assert len((await p.query("doc number", 4)).hits) == 4

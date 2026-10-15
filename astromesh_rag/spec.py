@@ -80,6 +80,13 @@ def build(spec: RAGSpec, *, llm=None, registry=default_registry) -> Pipeline:
         reranker = registry.build("reranker", rr.get("provider", "cross_encoder"), rr, ctx)
 
     top_k = rt.get("top_k", 5)
+    h = rt.get("hybrid", {})
+    fusion_name = rt.get("fusion", h.get("fusion", "rrf"))
+    if fusion_name not in ("rrf", "weighted"):
+        raise SpecError(f"unknown retrieval.fusion '{fusion_name}'; known: rrf, weighted")
+    weights = h.get("weights", [0.5, 0.5])
+    if fusion_name == "weighted" and not (isinstance(weights, list) and len(weights) == 2):
+        raise SpecError("weighted fusion needs exactly two weights: [vector, bm25]")
     common = {
         "reranker": reranker,
         "rerank_k": rr.get("top_k") or top_k,
@@ -89,14 +96,10 @@ def build(spec: RAGSpec, *, llm=None, registry=default_registry) -> Pipeline:
     if pattern == "naive":
         query = PATTERNS["naive"](embedder, index, **common)
     elif pattern == "hybrid":
-        h = rt.get("hybrid", {})
-        w = h.get("weights")
-        weighted = rt.get("fusion", h.get("fusion", "rrf")) == "weighted"
-        fusion = WeightedFusion(w) if weighted and w else RRF()
+        fusion = WeightedFusion(weights) if fusion_name == "weighted" else RRF()
         query = PATTERNS["hybrid"](embedder, index, bm25, fusion=fusion, **common)
     else:
-        extra = (
-            {"variants": rt["variants"]} if pattern == "multi_query" and "variants" in rt else {}
-        )
+        variants = rt.get("multi_query", {}).get("variants", rt.get("variants"))
+        extra = {"variants": variants} if pattern == "multi_query" and variants else {}
         query = PATTERNS[pattern](embedder, index, llm, **extra, **common)
-    return Pipeline(IngestPipeline(splitter, embedder, index, bm25), query)
+    return Pipeline(IngestPipeline(splitter, embedder, index, bm25), query, default_k=top_k)
